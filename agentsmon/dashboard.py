@@ -60,8 +60,8 @@ AGENT_TABLE = r"""
       <span class="svc-chev text-slate-400 text-xs ml-2 select-none" title="collapse / expand">▾</span>
     </div>
     <div class="svc-body">
-    <div class="rounded-lg border border-slate-200 bg-white overflow-x-auto">
-      <table class="w-full text-sm" style="table-layout:fixed;min-width:680px"><colgroup><col style="width:21%"><col style="width:13%"><col style="width:32%"><col style="width:12%"><col style="width:14%"><col style="width:8%"></colgroup><thead>
+    <div class="agent-table-wrap rounded-lg border border-slate-200 bg-white overflow-x-auto">
+      <table class="agent-table w-full text-sm" style="table-layout:fixed;min-width:680px"><colgroup><col style="width:21%"><col style="width:13%"><col style="width:32%"><col style="width:12%"><col style="width:14%"><col style="width:8%"></colgroup><thead>
         <tr class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-100">
           <th class="text-left font-medium px-2 py-2">Agent</th>
           <th class="text-left font-medium px-2 py-2">Model</th>
@@ -83,7 +83,31 @@ PAGE = r"""<!DOCTYPE html><html lang="en"><head>
 <title>Agents Monitoring</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
 <script src="/static/tailwind.js"></script>
-<style>.bar{transition:opacity .15s ease}.bar:hover{opacity:.65}.copied-flash{color:#059669!important;transition:color .1s}#toast{transition:opacity .2s ease}.agent-rows td{overflow:hidden}.sid{display:block;overflow:hidden;text-overflow:ellipsis}</style>
+<style>
+.bar{transition:opacity .15s ease}.bar:hover{opacity:.65}.copied-flash{color:#059669!important;transition:color .1s}#toast{transition:opacity .2s ease}
+.agent-rows td{overflow:hidden}.sid{display:block;overflow:hidden;text-overflow:ellipsis}.agent-age{display:none}
+.usage-resets{font-size:11px;color:#64748b}.usage-resets summary{cursor:pointer;display:inline-block;min-height:24px;padding:3px 6px;margin-left:-6px;touch-action:manipulation}.usage-reset-row{padding:2px 0}
+@media (max-width: 640px){
+  #app{max-width:100%!important;padding:12px 10px!important}
+  .agent-table-wrap{overflow-x:hidden!important}
+  .agent-table{width:100%!important;min-width:0!important;table-layout:auto!important}
+  .agent-table colgroup,.agent-table thead{display:none}
+  .agent-table tbody{display:block;width:100%}
+  .agent-table tbody tr.agent-row{display:grid;width:100%;box-sizing:border-box;grid-template-columns:minmax(0,1.15fr) minmax(0,.9fr) minmax(0,1fr) auto;grid-template-areas:"agent model status actions" "session session usage usage";gap:3px 2px;padding:6px 0;border-bottom:1px solid #f1f5f9}
+  .agent-table tbody tr.agent-row>td{display:block;width:auto;min-width:0;padding:4px 3px;overflow:hidden}
+  .agent-cell-agent{grid-area:agent}.agent-cell-model{grid-area:model}.agent-cell-session{grid-area:session}.agent-cell-status{grid-area:status}.agent-cell-actions{grid-area:actions}
+  .agent-cell-started{display:none!important}.agent-cell-plugin:not(.agent-cell-usage){display:none!important}
+  .agent-cell-usage{grid-area:usage;border-left:1px solid #e2e8f0;padding-left:7px!important;overflow:visible!important}
+  .agent-cell-agent{white-space:normal!important}.agent-cell-agent .agent-age{display:block;font-size:10px;font-weight:400;color:#94a3b8;line-height:1.2}
+  .agent-cell-model>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .agent-cell-session .sid{max-width:100%;white-space:nowrap;min-height:28px;display:flex;align-items:center}
+  .agent-cell-status .inline-flex{white-space:normal!important;gap:4px!important;font-size:11px}
+  .agent-cell-status .flex-col{min-width:0;overflow-wrap:anywhere}
+  .agent-cell-actions{padding-left:0!important;padding-right:2px!important}
+  .usage-cell-content{display:block;min-width:0}.usage-bar-label{white-space:normal!important;overflow-wrap:anywhere;font-size:10px;line-height:1.25}.usage-bar-track{margin-top:2px}
+  .usage-resets summary{min-height:30px;padding-top:7px;padding-bottom:7px}
+}
+</style>
 </head><body class="bg-slate-50 text-slate-800 antialiased">
 <div id="toast" class="fixed left-1/2 bottom-5 -translate-x-1/2 bg-slate-800 text-white text-sm px-2 py-1.5 rounded-md shadow-lg opacity-0 pointer-events-none" style="z-index:50">&nbsp;</div>
 <div id="app" class="mx-auto px-5 py-6" style="max-width:850px">
@@ -166,6 +190,7 @@ function fmtDuration(s){if(s==null)return "–";const d=Math.floor(s/86400),h=Ma
 function fmtTime(u){return u?new Date(u*1000).toLocaleString():"";}
 function fmtLat(ms){return ms==null?"–":(ms<1?"<1 ms":ms+" ms");}
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function shortSessionId(s){const v=String(s||"");return v.length>14?v.slice(0,8)+"…"+v.slice(-4):v;}
 const q=(r,s)=>r.querySelector(s);
 
 function renderTimeline(root, buckets, windowDays){
@@ -240,17 +265,24 @@ function fmtReset(ts){
     :when.toLocaleString([], {weekday:"short",day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"});
   return {in:span,at:"Resets "+at};
 }
-function renderCell(cell){
+function renderCell(cell,resetKey=""){
   if(!cell) return "–";
   const tones={ok:"text-emerald-600",warning:"text-amber-600",error:"text-rose-600",muted:"text-slate-400"};
   const bars=(cell.bars||[]).map(b=>{const left=Math.max(0,Math.round((100-b.percent)*10)/10), reset=fmtReset(b.reset);
-    return `<div title="${esc(b.title)}${reset?" · "+esc(reset.at):""} · ${b.percent}% used" class="mb-1"><span class="whitespace-nowrap">${esc(b.label)} <b>${left}% left</b>${reset?` <span class="text-slate-400">· ↻ ${esc(reset.in)}</span>`:""}</span><div class="h-1 bg-slate-100 rounded"><div class="h-1 rounded ${b.percent>=90?'bg-rose-500':b.percent>=70?'bg-amber-500':'bg-emerald-500'}" style="width:${b.percent}%"></div></div></div>`;}).join("");
-  return `<span title="${esc(cell.title)}" class="${tones[cell.tone]||''}">${esc(cell.text)}</span>`+bars;
+    return `<div title="${esc(b.title)}${reset?" · "+esc(reset.at):""} · ${b.percent}% used" class="usage-bar mb-1"><span class="usage-bar-label">${esc(b.label)} <b>${left}% left</b>${reset?` <span class="text-slate-400">· ↻ ${esc(reset.in)}</span>`:""}</span><div class="usage-bar-track h-1 bg-slate-100 rounded"><div class="h-1 rounded ${b.percent>=90?'bg-rose-500':b.percent>=70?'bg-amber-500':'bg-emerald-500'}" style="width:${b.percent}%"></div></div></div>`;}).join("");
+  const resetBars=(cell.bars||[]).map(b=>({label:b.label,reset:fmtReset(b.reset)})).filter(b=>b.reset);
+  let resetDetails="";
+  if(resetBars.length){
+    const storageKey="agentsmon.usage-resets:"+resetKey;
+    let open="";try{open=localStorage.getItem(storageKey)==="1"?" open":"";}catch(e){}
+    resetDetails=`<details class="usage-resets mt-1" data-reset-key="${esc(resetKey)}"${open}><summary>Reset times</summary><div>${resetBars.map(b=>`<div class="usage-reset-row"><b>${esc(b.label)}</b>: ${esc(b.reset.at)} (${esc(b.reset.in)})</div>`).join("")}</div></details>`;
+  }
+  return `<span class="usage-cell-content ${tones[cell.tone]||''}" title="${esc(cell.title)}">${esc(cell.text)}</span>`+bars+resetDetails;
 }
 function renderColumns(root,columns){
   const table=q(root,"table"), head=q(root,"thead tr");
   head.querySelectorAll(".plugin-column").forEach(n=>n.remove());
-  columns.forEach(c=>{const th=document.createElement("th");th.className="plugin-column text-left font-medium px-2 py-2";th.textContent=c.title;head.insertBefore(th,head.lastElementChild);});
+  columns.forEach(c=>{const th=document.createElement("th");th.className="plugin-column agent-cell-plugin text-left font-medium px-2 py-2"+(c.id==="limits"?" agent-cell-usage":"");th.textContent=c.title;head.insertBefore(th,head.lastElementChild);});
   const widths=[170,105,260,97,113,...columns.map(()=>100),65];
   q(root,"colgroup").innerHTML=columns.length?widths.map(w=>`<col style="width:${w}px">`).join(''):'<col style="width:21%"><col style="width:13%"><col style="width:32%"><col style="width:12%"><col style="width:14%"><col style="width:8%">';
   table.style.minWidth=(columns.length?810+columns.length*100:680)+"px";
@@ -286,11 +318,10 @@ function renderAgents(root, agents, summary=null, columns=[]){
   tb.innerHTML="";
   agents.forEach(a=>{
     const tcls=VENDOR[a.vendor]||"bg-slate-100 text-slate-600";
-    const copy=a.resume_cmd||a.session_id||"";
-    const tip=copy?`${copy} (click to copy)`:"no resume";
+    const tip=a.session_id?"Copy full session ID":a.resume_cmd?`${a.resume_cmd} (click to copy)`:"no resume";
     let sid;
     if(a.session_id){
-      sid=`<span class="sid font-mono text-xs text-slate-600 whitespace-nowrap cursor-pointer hover:text-sky-600" title="${esc(tip)}" data-copy="${esc(copy)}">${esc(a.session_id)}</span>`;
+      sid=`<button type="button" class="sid font-mono text-xs text-slate-600 whitespace-nowrap cursor-pointer hover:text-sky-600 text-left rounded" aria-label="Copy full session ID ${esc(a.session_id)}" title="${esc(tip)}" data-copy="${esc(a.session_id)}">${esc(shortSessionId(a.session_id))}</button>`;
     }else if(a.kind==="daemon" && a.port){
       // Daemons (gateways) have no session id — show the port they actually listen on instead.
       sid=`<span class="font-mono text-xs text-slate-500 whitespace-nowrap" title="gateway port">:${a.port}</span>`;
@@ -303,7 +334,7 @@ function renderAgents(root, agents, summary=null, columns=[]){
     const statusTip=[a.status_detail||a.status,
       ok&&a.latency_ms!=null?`latency ${fmtLat(a.latency_ms)}`:""].filter(Boolean).join(" · ");
     const stCls=a.needs_login?"text-amber-600":(ok?"text-slate-600":"text-slate-400");
-    const tr=document.createElement("tr"); tr.className="border-b border-slate-100 last:border-0";
+    const tr=document.createElement("tr"); tr.className="agent-row border-b border-slate-100 last:border-0";
     const nameBg=NAME_BG[a.name_color];
     const nameInner=nameBg?`<span class="inline-block rounded px-1.5 py-0.5 ${nameBg}">${esc(a.name)}</span>`:esc(a.name);
     // Only tmux agents can be attached to; daemons (kind "daemon", e.g. OpenClaw/Hermes) aren't in
@@ -317,13 +348,13 @@ function renderAgents(root, agents, summary=null, columns=[]){
     const tg=a.telegram_url?` <a href="${esc(a.telegram_url)}" target="_blank" rel="noopener" title="Open @${esc(a.telegram_bot)} in Telegram" class="inline-flex align-middle ml-1 hover:opacity-70"><svg viewBox="0 0 24 24" class="h-4 w-4" fill="#229ED9"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.27 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg></a>`:"";
     const recovery=a.restart_warning?`<br><span class="text-[11px] text-amber-600" title="${esc(a.restart_warning)}">⚠ Fresh conversation</span>`:"";
     tr.innerHTML=
-      `<td class="px-2 py-1.5 font-medium text-slate-700 whitespace-nowrap">${nameCell}${tg}${recovery}</td>`+
-      `<td class="px-2 py-1.5 whitespace-nowrap"><span title="${esc(a.account?'Account: '+a.account:a.label)}" class="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium ${tcls}">${esc(a.label)}</span>${a.metadata_error?'<br><span class="text-[11px] text-amber-600">Incomplete data</span>':""}</td>`+
-      `<td class="px-2 py-1.5">${sid}</td>`+
-      `<td class="px-2 py-1.5 text-slate-500 text-xs whitespace-nowrap" title="${esc(a.status_detail||'')}">${a.age!=null?"ago "+fmtDuration(a.age):"–"}</td>`+
-      `<td class="px-2 py-1.5" title="${esc(statusTip)}"><span class="inline-flex items-center gap-1.5 whitespace-nowrap ${stCls}"><span class="h-2 w-2 rounded-full ${dot} shrink-0"></span><span class="flex flex-col">${esc(statusTxt)}</span></span></td>`+
-      columns.map(c=>`<td class="px-2 py-1.5 text-xs">${renderCell((a.cells||{})[c.id])}</td>`).join("")+
-      `<td class="px-2 py-1.5 text-right whitespace-nowrap">${renderActions(a, root.dataset.svc)}</td>`;
+      `<td class="agent-cell-agent px-2 py-1.5 font-medium text-slate-700 whitespace-nowrap">${nameCell}${tg}${recovery}<span class="agent-age">${a.age!=null?"ago "+fmtDuration(a.age):""}</span></td>`+
+      `<td class="agent-cell-model px-2 py-1.5 whitespace-nowrap"><span title="${esc(a.account?'Account: '+a.account:a.label)}" class="inline-block rounded px-1.5 py-0.5 text-[11px] font-medium ${tcls}">${esc(a.label)}</span>${a.metadata_error?'<br><span class="text-[11px] text-amber-600">Incomplete data</span>':""}</td>`+
+      `<td class="agent-cell-session px-2 py-1.5">${sid}</td>`+
+      `<td class="agent-cell-started px-2 py-1.5 text-slate-500 text-xs whitespace-nowrap" title="${esc(a.status_detail||'')}">${a.age!=null?"ago "+fmtDuration(a.age):"–"}</td>`+
+      `<td class="agent-cell-status px-2 py-1.5" title="${esc(statusTip)}"><span class="inline-flex items-center gap-1.5 whitespace-nowrap ${stCls}"><span class="h-2 w-2 rounded-full ${dot} shrink-0"></span><span class="flex flex-col">${esc(statusTxt)}</span></span></td>`+
+      columns.map(c=>`<td class="agent-cell-plugin ${c.id==="limits"?"agent-cell-usage":""} px-2 py-1.5 text-xs">${renderCell((a.cells||{})[c.id],a.name+":"+c.id)}</td>`).join("")+
+      `<td class="agent-cell-actions px-2 py-1.5 text-right whitespace-nowrap">${renderActions(a, root.dataset.svc)}</td>`;
     tb.appendChild(tr);
   });
 }
@@ -383,12 +414,20 @@ async function refresh(){
   }catch(e){document.getElementById("footer").textContent="connection lost…";}
 }
 function copyText(text){
-  if(navigator.clipboard && window.isSecureContext){ return navigator.clipboard.writeText(text); }
-  // Fallback for plain http (e.g. over a VPN IP): clipboard API needs a secure context.
-  const ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
-  document.body.appendChild(ta); ta.focus(); ta.select();
-  try{ document.execCommand("copy"); }catch(e){} document.body.removeChild(ta);
-  return Promise.resolve();
+  if(!text) return Promise.resolve(false);
+  if(navigator.clipboard && window.isSecureContext){
+    try{return navigator.clipboard.writeText(text).then(()=>true,()=>fallbackCopy(text));}
+    catch(e){}
+  }
+  // Synchronous fallback keeps the tap's user activation on mobile/plain HTTP.
+  return Promise.resolve(fallbackCopy(text));
+}
+function fallbackCopy(text){
+  const ta=document.createElement("textarea");ta.value=text;ta.setAttribute("readonly","");
+  ta.style.cssText="position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;opacity:.01;font-size:16px;z-index:-1";
+  document.body.appendChild(ta);ta.focus({preventScroll:true});ta.select();ta.setSelectionRange(0,ta.value.length);
+  let copied=false;try{copied=document.execCommand("copy");}catch(e){}
+  ta.remove();return copied;
 }
 let _toastTimer;
 function showToast(msg){
@@ -398,13 +437,19 @@ function showToast(msg){
 }
 document.addEventListener("click", e=>{
   const el=e.target.closest("[data-copy]"); if(!el) return;
-  copyText(el.dataset.copy).then(()=>{
+  copyText(el.dataset.copy).then(copied=>{
+    if(!copied){showToast("Copy failed — press and hold the ID");return;}
     // Flash the element green + toast — no textContent swap, so column width never jumps.
     el.classList.add("copied-flash");
     setTimeout(()=>el.classList.remove("copied-flash"), 700);
     showToast("✓ Copied to clipboard");
   });
 });
+document.addEventListener("toggle",e=>{
+  if(e.target.matches("details.usage-resets")){
+    try{localStorage.setItem("agentsmon.usage-resets:"+e.target.dataset.resetKey,e.target.open?"1":"0");}catch(err){}
+  }
+},true);
 // Restart / Stop buttons → POST /api/agent/action, then refresh. Stop asks for confirmation.
 document.addEventListener("click", async e=>{
   const btn=e.target.closest(".agent-act"); if(!btn) return;
