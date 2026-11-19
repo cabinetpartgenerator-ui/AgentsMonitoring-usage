@@ -422,3 +422,20 @@ class AttachHintsAreQuoted(unittest.TestCase):
         self.assertTrue(hints)
         for expr in hints:
             self.assertTrue(expr.startswith("shlex.quote("), expr)
+
+
+class MobileDashboard(unittest.TestCase):
+    def test_agent_rows_reflow_to_two_lines_without_horizontal_scrolling(self):
+        self.assertIn('@media (max-width: 640px)', dashboard.PAGE)
+        self.assertIn('grid-template-areas:"agent model status actions" "session session usage usage"', dashboard.PAGE)
+        self.assertIn('.agent-cell-usage', dashboard.PAGE)
+
+    def test_session_id_is_short_on_screen_and_copy_uses_full_id(self):
+        self.assertIn('shortSessionId(a.session_id)', dashboard.PAGE)
+        self.assertIn('data-copy="${esc(a.session_id)}"', dashboard.PAGE)
+        self.assertIn('Copy full session ID', dashboard.PAGE)
+
+    def test_usage_resets_have_an_expandable_mobile_disclosure(self):
+        self.assertIn('<details class="usage-resets ', dashboard.PAGE)
+        self.assertIn('data-reset-key=', dashboard.PAGE)
+        self.assertIn('localStorage.setItem', dashboard.PAGE)
