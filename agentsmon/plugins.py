@@ -56,7 +56,10 @@ def cell(value):
         for b in objects(value['bars'],4):
             pct=number(b['percent'])
             if pct>100: raise ValueError('Invalid percent')
-            result['bars'].append({'label':text(b['label'],30),'percent':pct,'title':text(b.get('title',''))})
+            bar={'label':text(b['label'],30),'percent':pct,'title':text(b.get('title',''))}
+            # Optional reset time (epoch seconds); "remaining" is always derived from percent.
+            if b.get('reset') is not None: bar['reset']=int(number(b['reset']))
+            result['bars'].append(bar)
     return result
 
 

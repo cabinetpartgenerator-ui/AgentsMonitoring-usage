@@ -228,10 +228,23 @@ function renderRows(root, rows, details=false){
       `<td class="px-2 py-1.5" title="${esc(r.detail||"")}${r.last_ts?" · "+esc(fmtTime(r.last_ts)):""}"><span class="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium ${st[2]}"><span class="h-2 w-2 rounded-full ${st[0]} shrink-0"></span>${st[1]}</span></td>`+
     `</tr>`;}).join("");
 }
+function fmtReset(ts){
+  // Bar reset (epoch seconds) → countdown + local wall-clock time, recomputed on every refresh.
+  if(!ts) return null;
+  const left=Math.round(ts-Date.now()/1000);
+  if(left<=0) return {in:"now",at:"Resetting now"};
+  const d=Math.floor(left/86400), h=Math.floor(left%86400/3600), m=Math.floor(left%3600/60);
+  const span=d?`${d}d ${h}h`:h?`${h}h ${String(m).padStart(2,"0")}m`:`${Math.max(1,m)}m`;
+  const when=new Date(ts*1000), sameDay=when.toDateString()===new Date().toDateString();
+  const at=sameDay?when.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})
+    :when.toLocaleString([], {weekday:"short",day:"numeric",month:"numeric",hour:"2-digit",minute:"2-digit"});
+  return {in:span,at:"Resets "+at};
+}
 function renderCell(cell){
   if(!cell) return "–";
   const tones={ok:"text-emerald-600",warning:"text-amber-600",error:"text-rose-600",muted:"text-slate-400"};
-  const bars=(cell.bars||[]).map(b=>`<div title="${esc(b.title)}" class="mb-1"><span>${esc(b.label)} ${b.percent}%</span><div class="h-1 bg-slate-100 rounded"><div class="h-1 rounded ${b.percent>=90?'bg-rose-500':b.percent>=70?'bg-amber-500':'bg-emerald-500'}" style="width:${b.percent}%"></div></div></div>`).join("");
+  const bars=(cell.bars||[]).map(b=>{const left=Math.max(0,Math.round((100-b.percent)*10)/10), reset=fmtReset(b.reset);
+    return `<div title="${esc(b.title)}${reset?" · "+esc(reset.at):""} · ${b.percent}% used" class="mb-1"><span class="whitespace-nowrap">${esc(b.label)} <b>${left}% left</b>${reset?` <span class="text-slate-400">· ↻ ${esc(reset.in)}</span>`:""}</span><div class="h-1 bg-slate-100 rounded"><div class="h-1 rounded ${b.percent>=90?'bg-rose-500':b.percent>=70?'bg-amber-500':'bg-emerald-500'}" style="width:${b.percent}%"></div></div></div>`;}).join("");
   return `<span title="${esc(cell.title)}" class="${tones[cell.tone]||''}">${esc(cell.text)}</span>`+bars;
 }
 function renderColumns(root,columns){

@@ -31,11 +31,12 @@ KNOWN_AGENTS = [
     ("claude-code", "Claude Code", re.compile(r"(?:^|/)claude(?:\s|$)")),
     ("codex", "Codex", re.compile(r"(?:^|/)codex(?:\s|$|\sexec\b)")),
     ("antigravity", "Antigravity", re.compile(r"(?:^|/)agy(?:\s|$)")),
+    ("gemini-cli", "Gemini CLI", re.compile(r"(?:^|/)gemini(?:\s|$)")),
 ]
 
 #: Maps a detected kind to the maker, which colours its tag in the UI (anthropic=orange,
 #: openai=emerald, google=violet, other=slate).
-KIND_VENDOR = {"claude-code": "anthropic", "codex": "openai", "antigravity": "google"}
+KIND_VENDOR = {"claude-code": "anthropic", "codex": "openai", "antigravity": "google", "gemini-cli": "google"}
 
 #: How to resume a session per kind ({id} → session id). Shown as a hover tooltip on the id.
 RESUME_TEMPLATES = {

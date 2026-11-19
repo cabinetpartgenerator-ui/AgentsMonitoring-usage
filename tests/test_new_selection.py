@@ -54,7 +54,8 @@ class SupportedAgentTypes(unittest.TestCase):
     def test_new_offers_only_supported_agent_clis(self):
         from agentsmon import detect, wizard
         self.assertEqual([a['kind'] for a in wizard.AGENT_TYPES], ['claude-code', 'codex', 'antigravity'])
-        self.assertEqual([k for k, _, _ in detect.KNOWN_AGENTS], ['claude-code', 'codex', 'antigravity'])
+        # Gemini CLI is detected (and gets a Usage column) but is not offered by `new` yet.
+        self.assertEqual([k for k, _, _ in detect.KNOWN_AGENTS], ['claude-code', 'codex', 'antigravity', 'gemini-cli'])
 
 
 class FirstMessage(unittest.TestCase):

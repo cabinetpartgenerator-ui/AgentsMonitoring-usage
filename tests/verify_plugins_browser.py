@@ -165,11 +165,13 @@ async def verify(args):
                 assert posts==[{'name':'Example Agent','action':'reload','table':'fixture:team','row':'example'}],posts
                 payload['columns']=[{'id':'usage:limits','title':'Usage'}]
                 for row in (shared,extension):
-                    row['cells']={'usage:limits':{'text':'','bars':[{'label':'5h','percent':25,'title':'Fixture account'}]}}
+                    row['cells']={'usage:limits':{'text':'','bars':[{'label':'5h','percent':25,'title':'Fixture account','reset':int(time.time())+7500}]}}
                 await page.evaluate('refresh()')
                 await page.wait_for_timeout(300)
                 await page.screenshot(path=str(args.out/'usage-debug.png'),full_page=True)
                 same(await geometry(upper),await geometry(lower))
+                usage_text=await lower.inner_text()
+                assert '75% left' in usage_text and '↻ 2h 0' in usage_text,usage_text
                 await page.screenshot(path=str(args.out/'usage.png'),full_page=True)
                 extension.update(alive=False,status='Unresponsive',status_detail='Last recovery: fixture')
                 table.update(up=False,error='Supervisor unavailable')

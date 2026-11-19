@@ -198,6 +198,24 @@ agentsmon doctor            # sanity-check tools + config
 agentsmon uninstall         # stop services, remove config + state (agents untouched)
 ```
 
+## Remaining usage and reset times (0.4)
+
+The optional Usage column shows, for each Codex, Claude Code and Gemini CLI agent, how much of
+each limit window is **left** and **when it resets**, e.g. `5h 77% left · ↻ 2h 05m`.
+Add to `~/.config/agentsmon/config.json` and restart the dashboard:
+
+```json
+{"usage_plugin": {"auto": true}}
+```
+
+- **Codex** – nothing else to do; read from the session's own rollout file.
+- **Claude Code** – set `"statusLine": {"type": "command", "command": "agentsmon usage claude-statusline"}`
+  in `~/.claude/settings.json` (subscription logins only).
+- **Gemini CLI** – run `agentsmon usage gemini-refresh` from cron (e.g. `*/5 * * * *`); it uses
+  Gemini CLI's cached Google login and stores only the quota.
+
+The dashboard itself reads only local snapshots. Details: [docs/PLUGINS.md](docs/PLUGINS.md).
+
 ## Plugins and clean core (0.3)
 
 Keep organization-specific integrations outside this repository. Versioned plugins can add

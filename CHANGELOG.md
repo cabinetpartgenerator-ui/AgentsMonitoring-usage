@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 (2026-11-18)
+
+- Usage column shows how much of each limit is **left** and **when it resets** (countdown, local time in the tooltip) for Codex, Claude Code and Gemini CLI.
+- `"usage_plugin": {"auto": true}` maps each agent to its own session snapshot: Codex rollouts are found by session ID, Claude Code via the new `agentsmon usage claude-statusline` status line command.
+- Gemini CLI agents are detected (Google tag). New opt-in `agentsmon usage gemini-refresh` saves the Gemini quota (per model, with reset time) for the Usage column, using Gemini CLI's cached login without storing it.
+- Claude 7d Opus/Sonnet windows and older Codex `resets_in_seconds` are shown; usage tone turns amber/red at 70/90 % used.
+
 ## 0.3.12 (2026-10-22)
 
 - The login hint for a Claude agent quotes the session name, so `tmux attach -t "T - Claude"` works when pasted. A test checks every attach hint.

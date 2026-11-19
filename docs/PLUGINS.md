@@ -74,7 +74,8 @@ Every response is JSON-serializable. Optional response fields:
   detectors or usage columns. `account` appears in the model's tooltip. Cannot alter liveness,
   session identity or core actions.
 - `cells`: map of column ID to string or `{text, title?, tone?, bars?}`. Tone is `muted`,
-  `ok`, `warning` or `error`; at most four bars `{label, percent, title?}`, percent 0–100.
+  `ok`, `warning` or `error`; at most four bars `{label, percent, title?, reset?}`, percent 0–100 (used),
+  `reset` epoch seconds shown as a countdown.
 - `hidden_sessions`: up to 200 exact tmux names to hide from the core table.
   Generic config `hidden_sessions` remains available and supports its existing patterns.
 - `hidden_services`: exact service names whose duplicate display should be suppressed.
@@ -146,12 +147,61 @@ since workers use isolated Python mode).
 
 ## Built-in opt-in Usage plugin
 
-Inspired by TomasErnest's PR #8. Reads local rate-limit snapshots, **never** OAuth tokens.
-No outbound network or account guessing. Configure explicit row IDs and source files:
+Inspired by TomasErnest's PR #8. Shows, per agent, how much of each rate-limit window is
+**left** and **when it resets** (countdown plus local time in the tooltip), e.g.
+`5h 77% left · ↻ 2h 05m`. The bar fills with the used share. The dashboard never reads OAuth
+tokens and makes no network requests; it only reads local snapshots.
+
+### Automatic per-session mapping
+
+```json
+{"usage_plugin": {"auto": true}}
+```
+
+| Agent | Snapshot | Producer |
+|---|---|---|
+| Codex | `$CODEX_HOME/sessions/**/rollout-*-<session_id>.jsonl` | Codex itself (every turn) |
+| Claude Code | `~/.local/state/agentsmon/usage/claude/<session_id>.json` | `agentsmon usage claude-statusline` |
+| Gemini CLI | `~/.local/state/agentsmon/usage/gemini.json` | `agentsmon usage gemini-refresh` |
+
+Each Codex/Claude row reads only the snapshot of **its own** session ID; a row without one shows
+nothing instead of borrowing another session's numbers. Gemini CLI keeps one Google login per
+OS user (`~/.gemini`), so its snapshot applies to every `gemini-cli` row of that user (change
+with `"gemini_kinds"`). `state_dir` and `codex_home` settings override the default paths.
+
+**Claude Code** – set the status line in `~/.claude/settings.json`. It saves the session's
+`rate_limits` (5h, 7d and, when reported, 7d Opus/Sonnet) and prints e.g.
+`Opus · 5h 88% left ↻1h59m · 7d 61% left ↻3d4h`:
+
+```json
+{"statusLine": {"type": "command", "command": "agentsmon usage claude-statusline"}}
+```
+
+Claude Code only sends `rate_limits` to the status line for subscription (Pro/Max) logins and
+after the first answer of a session.
+
+**Gemini CLI** – Gemini CLI keeps its quota only in memory, so a separate, explicitly opt-in
+command asks Google (`cloudcode-pa.googleapis.com`, `loadCodeAssist` + `retrieveUserQuota`, the
+same calls Gemini CLI's `/stats` uses). It uses the access token cached in
+`~/.gemini/oauth_creds.json` only while it is valid; it never refreshes, copies or stores it.
+Only the quota buckets are written (0600). Run it from cron, e.g. every 5 minutes:
+
+```
+*/5 * * * * agentsmon usage gemini-refresh >/dev/null 2>&1
+```
+
+When the token has expired (Gemini CLI not used for an hour), the command exits with code 2 and
+the column shows `Cached` until Gemini CLI runs again. Only "Sign in with Google" logins have
+a Code Assist quota; API-key logins have none.
+
+### Explicit mapping
+
+Explicit `sources` always win over discovery. Row IDs are core agent names or `plugin:table:row`:
 
 ```json
 {
   "usage_plugin": {
+    "auto": true,
     "sources": {
       "work-claude": {"format": "claude-statusline", "path": "/path/to/statusline.json", "account": "Work"},
       "example:workers:one": {"format": "codex-rollout", "path": "/path/to/rollout.jsonl", "account": "Team"}
@@ -160,14 +210,15 @@ No outbound network or account guessing. Configure explicit row IDs and source f
 }
 ```
 
-Supported formats: Claude statusline JSON with `rate_limits.five_hour/seven_day`, Codex
-rollout JSONL `payload.rate_limits.primary/secondary`, manually supplied ChatGPT-compatible
-snapshot `rate_limit.primary_window/secondary_window`. Reads at most 2 MB (tail for rollout).
-No producer is installed automatically: reuse an existing statusline/usage capture, or have
-your reviewed integration atomically write its snapshot. A missing source displays
+Supported formats: Claude statusline JSON with `rate_limits.five_hour/seven_day`
+(`used_percentage`, `resets_at`), Codex rollout JSONL `payload.rate_limits.primary/secondary`
+(`used_percent`, `resets_at` or older `resets_in_seconds`), ChatGPT-compatible snapshot
+`rate_limit.primary_window/secondary_window`, and `gemini-quota`
+(`{"buckets": [{"modelId", "remainingFraction", "resetTime"}]}`, up to four models, the
+agent's own model first). Reads at most 2 MB (tail for rollout). A missing source displays
 `Unavailable`; stale (over ten minutes) shows `Cached`; expired windows show no current
-reading. Reported window lengths take precedence over fallback labels. Percent is quota
-used, not dollars or token cost. Core includes no auto-fetch from private account APIs.
+reading. Reported window lengths take precedence over fallback labels. Percent is quota, not
+dollars or token cost. Bars may carry an optional `reset` (epoch seconds) for any plugin.
 
 ## Tests
 

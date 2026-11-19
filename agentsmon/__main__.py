@@ -41,6 +41,10 @@ def main(argv=None) -> int:
     sub.add_parser("doctor", help="diagnose config + tools")
     un = sub.add_parser("uninstall", help="stop and remove everything")
     un.add_argument("--yes", action="store_true")
+    us = sub.add_parser("usage", help="write usage snapshots for the Usage column")
+    us.add_argument("source", choices=["claude-statusline", "gemini-refresh"],
+                    help="claude-statusline: Claude Code status line command (reads stdin); "
+                         "gemini-refresh: fetch Gemini CLI quota with its cached login")
     args = p.parse_args(argv)
 
     if args.command == "status":
@@ -87,6 +91,11 @@ def main(argv=None) -> int:
     if args.command == "uninstall":
         from . import uninstaller
         return uninstaller.run(yes=args.yes)
+    if args.command == "usage":
+        from . import usage_sources
+        if args.source == "claude-statusline":
+            return usage_sources.claude_statusline()
+        return usage_sources.gemini_refresh()
     p.error("unknown command")
     return 2
 
